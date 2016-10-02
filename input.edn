@@ -1,0 +1,5 @@
+{:store-path "/tmp/sync-test"
+ :sync-path "/var/tmp/input"
+ :remote "ws://localhost:31744"
+ :user "mail:whilo@topiq.es"
+ :cdvcs-id #uuid "34db9ec4-82bf-4c61-8e2a-a86294f0e6d4"}
