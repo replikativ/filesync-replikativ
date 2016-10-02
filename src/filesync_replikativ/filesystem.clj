@@ -1,15 +1,10 @@
 (ns filesync-replikativ.filesystem
-  (:require [replikativ.crdt.cdvcs.stage :as cs]
+  (:require [clojure.data :refer [diff]]
             [clojure.java.io :as io]
-            [clojure.data :refer [diff]]
-            [konserve.core :as k]
-            [hasch.core :refer [uuid]]
-            [clojure.core.async :refer [go <!! >!! chan go-loop] :as async])
-  (:import [java.nio.file Files LinkOption]
-           [java.io File ByteArrayOutputStream FileInputStream FileOutputStream]
-           [java.util Date]))
-
-
+            [hasch.core :refer [uuid]])
+  (:import [java.io ByteArrayOutputStream File FileInputStream FileOutputStream]
+           [java.nio.file Files LinkOption]
+           java.util.Date))
 
 (defn last-modified-time [f]
   (-> (io/file f)
@@ -69,7 +64,7 @@
   base-path)
 
 
-(def eval-fs-fns 
+(def eval-fs-fns
   {'add-dir (fn [base-path {p :path}]
               (.mkdirs (File. (str base-path p)))
               base-path)

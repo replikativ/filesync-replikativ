@@ -8,6 +8,11 @@ A filesystem synchronization tool similar to Dropbox over replikativ. It is stil
 lein run resources/example-config.edn
 ~~~
 
+## TODO
+
+- do not add readd folder on each peer after sync
+- allow OR-Map for different semantics
+
 ## License
 
 Copyright © 2016 Christian Weilbach

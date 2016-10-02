@@ -1,18 +1,17 @@
 (ns filesync-replikativ.core
   (:gen-class)
-  (:require [replikativ.crdt.cdvcs.stage :as cs]
+  (:require [clojure.core.async :as async :refer [chan timeout]]
             [filesync-replikativ.filesystem :refer :all]
-            [clojure.java.io :as io]
-            [clojure.data :refer [diff]]
-            [konserve.core :as k]
-            [konserve.filestore :refer [new-fs-store]]
-            [replikativ.peer :refer [client-peer]]
-            [replikativ.crdt.cdvcs.realize :as r]
-            [replikativ.stage :refer [connect! create-stage!]]
-            [hasch.core :refer [uuid]]
-            [full.async :refer [<?? go-try go-loop-try <?]]
-            [clojure.core.async :refer [go <!! >!! chan go-loop timeout] :as async])
-  (:import [java.util Date]))
+            [full.async :refer [<? <?? go-loop-try]]
+            [konserve
+             [core :as k]
+             [filestore :refer [new-fs-store]]]
+            [replikativ
+             [peer :refer [client-peer]]
+             [stage :refer [connect! create-stage!]]]
+            [replikativ.crdt.cdvcs
+             [realize :as r]
+             [stage :as cs]]))
 
 ;; 1. list all files
 ;; how to deal with special files? folder/symlinks etc.?
@@ -22,7 +21,7 @@
 
 
 (defn -main [config-path]
-  (let [{:keys [sync-path store-path user cdvcs-id remote] :as config}
+  (let [{:keys [sync-path store-path user cdvcs-id remotes] :as config}
         (read-string (slurp config-path))
         _ (prn "Syncing folder with config:" config)
         _ (def store (<?? (new-fs-store store-path)))
@@ -36,7 +35,7 @@
                                                ;; do not re-sync on startup
                                                ;; :applied-log [sync-path :in-loop]
                                                ))
-    (connect! stage remote)
+    (doseq [r remotes] (connect! stage r))
     (def sync-out-loop
       (go-loop-try [before (or (<? (k/get-in store [[sync-path :stored]]))
                                {})]
@@ -45,7 +44,10 @@
                      (let [txs (->> (delta before after)
                                     add-blobs-to-deltas
                                     (relative-paths sync-path))]
-                       (when-not (empty? txs)
+                       (when-not (and (empty? txs)
+                                      (> (- (.getTime (java.util.Date.))
+                                            (.getTime (last-modified-time sync-path)))
+                                         5000))
                          (prn "New txs:" txs)
                          (<? (cs/transact! stage [user cdvcs-id] txs))
                          (<? (k/assoc-in store [[sync-path :stored]] after))))
@@ -60,7 +62,9 @@
 
   (get-in @stage ["mail:whilo@topiq.es" #uuid "34db9ec4-82bf-4c61-8e2a-a86294f0e6d4" :state])
 
-  (<?? (r/head-value store eval-fs-fns (get-in @stage ["mail:whilo@topiq.es" #uuid "34db9ec4-82bf-4c61-8e2a-a86294f0e6d4" :state])))
+  (let [{:keys [commit-graph heads]}
+        (get-in @stage ["mail:whilo@topiq.es" #uuid "34db9ec4-82bf-4c61-8e2a-a86294f0e6d4" :state])]
+    (<?? (r/commit-history-values store commit-graph (first heads))))
 
   )
 
