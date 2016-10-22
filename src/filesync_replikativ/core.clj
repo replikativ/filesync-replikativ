@@ -2,7 +2,7 @@
   (:gen-class)
   (:require [clojure.core.async :as async :refer [chan timeout]]
             [filesync-replikativ.filesystem :refer :all]
-            [full.async :refer [<? <?? go-loop-try]]
+            [superv.async :refer [<? <?? go-loop-try S]]
             [konserve
              [core :as k]
              [filestore :refer [new-fs-store]]]
@@ -24,10 +24,10 @@
   (let [{:keys [sync-path store-path user cdvcs-id remotes] :as config}
         (read-string (slurp config-path))
         _ (prn "Syncing folder with config:" config)
-        _ (def store (<?? (new-fs-store store-path)))
-        _ (def peer (<?? (client-peer store)))
-        _ (def stage (<?? (create-stage! user peer)))
-        _ (<?? (cs/create-cdvcs! stage :id cdvcs-id))
+        _ (def store (<?? S (new-fs-store store-path)))
+        _ (def peer (<?? S (client-peer S store)))
+        _ (def stage (<?? S (create-stage! user peer)))
+        _ (<?? S (cs/create-cdvcs! stage :id cdvcs-id))
         c (chan)]
     (def sync-in-loop (r/stream-into-identity! stage [user cdvcs-id]
                                                eval-fs-fns
@@ -37,23 +37,24 @@
                                                ))
     (doseq [r remotes] (connect! stage r))
     (def sync-out-loop
-      (go-loop-try [before (or (<? (k/get-in store [[sync-path :stored]]))
+      (go-loop-try S
+                   [before (or (<? S (k/get-in store [[sync-path :stored]]))
                                {})]
-                   (<? (timeout 10000))
+                   (<? S (timeout 10000))
                    (let [after (list-dir sync-path)]
                      (let [txs (->> (delta before after)
                                     add-blobs-to-deltas
                                     (relative-paths sync-path))]
-                       (when-not (and (empty? txs)
-                                      (> (- (.getTime (java.util.Date.))
-                                            (.getTime (last-modified-time sync-path)))
-                                         5000))
+                       (when (and (not (empty? txs))
+                                  (> (- (.getTime (java.util.Date.))
+                                        (.getTime (last-modified-time sync-path)))
+                                     5000))
                          (prn "New txs:" txs)
-                         (<? (cs/transact! stage [user cdvcs-id] txs))
-                         (<? (k/assoc-in store [[sync-path :stored]] after))))
+                         (<? S (cs/transact! stage [user cdvcs-id] txs))
+                         (<? S (k/assoc-in store [[sync-path :stored]] after))))
                      (recur after))))
     ;; HACK block main thread
-    (<?? c)))
+    (<?? S c)))
 
 
 (comment

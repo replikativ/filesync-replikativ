@@ -30,7 +30,8 @@
 
 (defn delta [before after]
   (let [[a b c] (diff before after)]
-    (concat (for [[p {t :type}] (reverse (sort-by key a))]
+    (concat (for [[p {t :type}] (reverse (sort-by key a))
+                  :when (not (get b p))]
               [(if (= t :dir) 'remove-dir 'remove-file) {:path p}])
             (for [[p {t :type}] (sort-by key b)]
               [(if (= t :dir) 'add-dir 'add-file) {:path p}]))))
@@ -71,11 +72,11 @@
    'remove-dir remove-path
    'add-file (fn [base-path {p :path c :content}]
                ;; only overwrite if it is different
-               (prn "ADDING FILE" p)
                (let [p (str base-path p)
                      prev-id (when (.exists (io/file p))
                                (uuid (io/file p)))]
                  (when-not (= prev-id (uuid c))
+                   (prn "ADDING FILE" p)
                    (when (.exists (.getParentFile (io/file p)))
                      (with-open [fos (FileOutputStream. (io/file p))]
                        (io/copy c fos)))))
