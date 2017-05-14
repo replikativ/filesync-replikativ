@@ -26,8 +26,6 @@
        (into {})))
 
 
-
-
 (defn delta [before after]
   (let [[a b c] (diff before after)]
     (concat (for [[p {t :type}] (reverse (sort-by key a))

@@ -41,24 +41,30 @@
                    [before (or (<? S (k/get-in store [[sync-path :stored]]))
                                {})]
                    (<? S (timeout 10000))
-                   (let [after (list-dir sync-path)]
-                     (let [txs (->> (delta before after)
-                                    add-blobs-to-deltas
-                                    (relative-paths sync-path))]
-                       (when (and (not (empty? txs))
-                                  (> (- (.getTime (java.util.Date.))
-                                        (.getTime (last-modified-time sync-path)))
-                                     5000))
-                         (prn "New txs:" txs)
-                         (<? S (cs/transact! stage [user cdvcs-id] txs))
-                         (<? S (k/assoc-in store [[sync-path :stored]] after))))
-                     (recur after))))
+                   ;; TODO let's try to wait if data is currently being written
+                   ;; we randomize, so we do not get in lock-step with some application
+                   ;; this should ensure liveness
+                   (if (> (- (.getTime (java.util.Date.))
+                             (.getTime (last-modified-time sync-path)))
+                          (rand-int 5000))
+                     (let [after (list-dir sync-path)]
+                       (let [txs (->> (delta before after)
+                                      add-blobs-to-deltas
+                                      (relative-paths sync-path))]
+                         (when (not (empty? txs))
+                           (prn "New txs:" txs)
+                           (<? S (cs/transact! stage [user cdvcs-id] txs))
+                           (<? S (k/assoc-in store [[sync-path :stored]] after))))
+                       (recur after))
+                     (recur before))))
     ;; HACK block main thread
     (<?? S c)))
 
 
 (comment
   (-main "resources/example-config.edn")
+
+  (list-dir "/var/tmp/input")
 
 
   (get-in @stage ["mail:whilo@topiq.es" #uuid "34db9ec4-82bf-4c61-8e2a-a86294f0e6d4" :state])
