@@ -30,7 +30,7 @@
         _ (<?? S (cs/create-cdvcs! stage :id cdvcs-id))
         c (chan)]
     (def sync-in-loop (r/stream-into-identity! stage [user cdvcs-id]
-                                               eval-fs-fns
+                                               (eval-fs-fns store)
                                                sync-path
                                                ;; do not re-sync on startup
                                                ;; :applied-log [sync-path :in-loop]
@@ -47,15 +47,20 @@
                    (if (> (- (.getTime (java.util.Date.))
                              (.getTime (last-modified-time sync-path)))
                           (rand-int 5000))
-                     (let [after (list-dir sync-path)]
-                       (let [txs (->> (delta before after)
-                                      add-blobs-to-deltas
-                                      (relative-paths sync-path))]
-                         (when (not (empty? txs))
-                           (prn "New txs:" txs)
-                           (<? S (cs/transact! stage [user cdvcs-id] txs))
-                           (<? S (k/assoc-in store [[sync-path :stored]] after))))
-                       (recur after))
+                     (recur (try
+                              (let [after (list-dir sync-path)]
+                                (let [txs (->> (delta before after)
+                                               add-blobs-to-deltas
+                                               (relative-paths sync-path))]
+                                  (when (not (empty? txs))
+                                    (prn "New txs:" txs)
+                                    (<? S (cs/transact! stage [user cdvcs-id] txs))
+                                    (<? S (k/assoc-in store [[sync-path :stored]] after))))
+                                after
+                                )
+                              (catch Exception e
+                                (prn "Retry after exception during sync:" e)
+                                before)))
                      (recur before))))
     ;; HACK block main thread
     (<?? S c)))

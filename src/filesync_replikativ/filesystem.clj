@@ -1,7 +1,10 @@
 (ns filesync-replikativ.filesystem
   (:require [clojure.data :refer [diff]]
             [clojure.java.io :as io]
-            [hasch.core :refer [uuid]])
+            [hasch.core :refer [uuid]]
+            [replikativ.environ :refer [store-blob-trans-value]]
+            [konserve.core :as k]
+            [superv.async :refer [<?? S]])
   (:import [java.io ByteArrayOutputStream File FileInputStream FileOutputStream]
            [java.nio.file Files LinkOption]
            java.util.Date))
@@ -35,23 +38,25 @@
               [(if (= t :dir) 'add-dir 'add-file) {:path p}]))))
 
 
-;; still inline
 (defn add-blobs-to-deltas [ds]
-  (map (fn [op]
-         (let [[k p] op]
-           (if (= k 'add-file)
-             [k (assoc p :content (with-open [out (ByteArrayOutputStream.)]
-                                    (io/copy (FileInputStream. (io/file (:path p))) out)
-                                    (.toByteArray out)))]
-             op)))
-       ds))
-
-
+  (mapcat
+   (fn [op]
+     (let [[k p] op]
+       (if (= k 'add-file)
+         (let [bar (with-open [out (ByteArrayOutputStream.)]
+                     (io/copy (FileInputStream. (io/file (:path p))) out)
+                     (.toByteArray out))]
+           [[store-blob-trans-value bar]
+            [k (assoc p :content (uuid bar))]])
+         [op])))
+   ds))
 
 
 (defn relative-paths [base-path deltas]
   (map (fn [[k p]]
-         [k (update-in p [:path] #(.replace % base-path ""))])
+         (if (:path p)
+           [k (update-in p [:path] #(.replace % base-path ""))]
+           [k p]))
        deltas))
 
 
@@ -63,7 +68,7 @@
   base-path)
 
 
-(def eval-fs-fns
+(defn eval-fs-fns [store]
   {'add-dir (fn [base-path {p :path}]
               (.mkdirs (File. (str base-path p)))
               base-path)
@@ -73,11 +78,14 @@
                (let [p (str base-path p)
                      prev-id (when (.exists (io/file p))
                                (uuid (io/file p)))]
-                 (when-not (= prev-id (uuid c))
+                 (when-not (= prev-id c)
                    (prn "ADDING FILE" p)
                    (when (.exists (.getParentFile (io/file p)))
-                     (with-open [fos (FileOutputStream. (io/file p))]
-                       (io/copy c fos)))))
+                     (<?? S (k/bget store c
+                                    (fn [{:keys [input-stream] :as in}]
+                                      (prn "INPUT" in)
+                                      (with-open [fos (FileOutputStream. (io/file p))]
+                                        (io/copy input-stream fos))))))))
                base-path)
    'remove-file remove-path})
 
