@@ -44,7 +44,7 @@ system guarantees merkle integrity.
 
 ### drawbacks
 - you depend on IPFS for availability, while the `:inline` replication ensures
-  that all your data is available
+  that all your data is available locally
   
 
 This works by storing the content in the external content addressable store:
