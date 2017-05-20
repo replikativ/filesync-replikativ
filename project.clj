@@ -4,7 +4,8 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [io.replikativ/replikativ "0.2.2-SNAPSHOT"]
-                 [com.fzakaria/slf4j-timbre "0.3.1"]]
+                 [io.replikativ/replikativ "0.2.2"]
+                 [com.fzakaria/slf4j-timbre "0.3.1"]
+                 [clj-ipfs-api "1.2.3"]]
 
   :main filesync-replikativ.core)

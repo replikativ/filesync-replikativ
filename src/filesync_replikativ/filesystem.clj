@@ -2,6 +2,7 @@
   (:require [clojure.data :refer [diff]]
             [clojure.java.io :as io]
             [hasch.core :refer [uuid]]
+            [clj-ipfs-api.core :as ipfs]
             [replikativ.environ :refer [store-blob-trans-value]]
             [konserve.core :as k]
             [superv.async :refer [<?? S]])
@@ -38,16 +39,31 @@
               [(if (= t :dir) 'add-dir 'add-file) {:path p}]))))
 
 
-(defn add-blobs-to-deltas [ds]
+(defn add-blobs-to-deltas [blob-backend ds]
   (mapcat
    (fn [op]
      (let [[k p] op]
        (if (= k 'add-file)
-         (let [bar (with-open [out (ByteArrayOutputStream.)]
-                     (io/copy (FileInputStream. (io/file (:path p))) out)
-                     (.toByteArray out))]
-           [[store-blob-trans-value bar]
-            [k (assoc p :content (uuid bar))]])
+         (case blob-backend
+           :ipfs-block
+           (let [ipfs-ref
+                 (ipfs/block-put
+                  {:request {:multipart [{:name (pr-str (:path p))
+                                          :content (FileInputStream. (io/file (:path p)))
+                                          :content-type "application/octet-stream"}]}})]
+             [[k (assoc p
+                        :id (uuid (io/file (:path p)))
+                        :ref ipfs-ref
+                        :type :ipfs-block)]])
+
+           :inline
+           (let [bar (with-open [out (ByteArrayOutputStream.)]
+                       (io/copy (FileInputStream. (io/file (:path p))) out)
+                       (.toByteArray out))]
+             [[store-blob-trans-value bar]
+              [k (assoc p
+                        :id (uuid bar)
+                        :type :inline)]]))
          [op])))
    ds))
 
@@ -68,24 +84,30 @@
   base-path)
 
 
-(defn eval-fs-fns [store]
+(defn eval-fs-fns [blob-backend store]
   {'add-dir (fn [base-path {p :path}]
               (.mkdirs (File. (str base-path p)))
               base-path)
    'remove-dir remove-path
-   'add-file (fn [base-path {p :path c :content}]
+   'add-file (fn [base-path {p :path id :id t :type ref :ref}]
                ;; only overwrite if it is different
                (let [p (str base-path p)
                      prev-id (when (.exists (io/file p))
                                (uuid (io/file p)))]
-                 (when-not (= prev-id c)
+                 (when-not (= prev-id id)
                    (prn "ADDING FILE" p)
                    (when (.exists (.getParentFile (io/file p)))
-                     (<?? S (k/bget store c
-                                    (fn [{:keys [input-stream] :as in}]
-                                      (prn "INPUT" in)
-                                      (with-open [fos (FileOutputStream. (io/file p))]
-                                        (io/copy input-stream fos))))))))
+                     (case t
+                       :ipfs-block
+                       (io/copy (ipfs/block-get (:Key ref) {:request {:as :stream}})
+                                (io/file p))
+
+                       :inline
+                       (<?? S (k/bget store id
+                                      (fn [{:keys [input-stream] :as in}]
+                                        (prn "INPUT" in)
+                                        (with-open [fos (FileOutputStream. (io/file p))]
+                                          (io/copy input-stream fos)))))))))
                base-path)
    'remove-file remove-path})
 

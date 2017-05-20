@@ -21,7 +21,8 @@
 
 
 (defn -main [config-path]
-  (let [{:keys [sync-path store-path user cdvcs-id remotes] :as config}
+  (let [{:keys [sync-path store-path user cdvcs-id remotes
+                blob-backend] :as config}
         (read-string (slurp config-path))
         _ (prn "Syncing folder with config:" config)
         _ (def store (<?? S (new-fs-store store-path)))
@@ -30,7 +31,7 @@
         _ (<?? S (cs/create-cdvcs! stage :id cdvcs-id))
         c (chan)]
     (def sync-in-loop (r/stream-into-identity! stage [user cdvcs-id]
-                                               (eval-fs-fns store)
+                                               (eval-fs-fns blob-backend store)
                                                sync-path
                                                ;; do not re-sync on startup
                                                ;; :applied-log [sync-path :in-loop]
@@ -50,7 +51,7 @@
                      (recur (try
                               (let [after (list-dir sync-path)]
                                 (let [txs (->> (delta before after)
-                                               add-blobs-to-deltas
+                                               (add-blobs-to-deltas blob-backend)
                                                (relative-paths sync-path))]
                                   (when (not (empty? txs))
                                     (prn "New txs:" txs)

@@ -1,9 +1,11 @@
 # filesync-replikativ
 
+![quick demo](./quick_demo.gif)
+
 A filesystem synchronization tool similar to Dropbox over replikativ. It works
 similar to git due to [CDVCS](http://replikativ.io/doc/cdvcs.html). To resolve
 conflicts you need to drop to the REPL still. You also cannot transfer files
-larger than 10 MiB at the moment. 
+larger than 50 MiB at the moment, but this is not too hard to fix. 
 
 ## Usage
 
@@ -19,12 +21,47 @@ conflicts!
  :sync-path "/var/tmp/input"
  :remotes ["ws://localhost:31744"]
  :user "mail:whilo@topiq.es"
- :cdvcs-id #uuid "34db9ec4-82bf-4c61-8e2a-a86294f0e6d4"}
+ :cdvcs-id #uuid "34db9ec4-82bf-4c61-8e2a-a86294f0e6d4"
+ :blob-backend :inline #_:ipfs-block}
 ~~~
 
 ~~~shell
 lein run resources/example-config.edn
 ~~~
+
+## Content Addressable backends
+
+Filesync can leverage [IPFS](https://ipfs.io)' fast content delivery mechanisms
+and demonstrates how to integrate a content addressable store with it. A
+critical requirement is that the content is immutable. If it is addressable
+through a merkle semantics then it composes well with replikativ and the whole
+system guarantees merkle integrity.
+
+### benefits
+- fast and efficient p2p binary delivery
+- access to your files also from IPFS
+- automatic deduplication through IPFS' replication semantics (link?)
+
+### drawbacks
+- you depend on IPFS for availability, while the `:inline` replication ensures
+  that all your data is available
+  
+
+This works by storing the content in the external content addressable store:
+
+~~~clojure
+(ipfs/block-put {:request {:multipart [{:name (pr-str (:path p))
+                                        :content (FileInputStream. (io/file (:path p)))
+                                        :content-type "application/octet-stream"}]}})
+~~~
+
+And then storing this reference. There is nothing magical to it. Other possible
+backends would
+be [eMule](http://www.emule-project.net/home/perl/general.cgi?l=2),
+[bittorrent](http://bittorrent.org/)
+or [dat](https://github.com/datproject/dat). Feel free to open pull-requests.
+
+
 
 ## TODO
 
