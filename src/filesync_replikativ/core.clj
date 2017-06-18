@@ -3,6 +3,7 @@
   (:require [clojure.core.async :as async :refer [chan timeout]]
             [filesync-replikativ.filesystem :refer :all]
             [superv.async :refer [<? <?? go-loop-try S]]
+            [clj-ipfs-api.core :as ipfs]
             [konserve
              [core :as k]
              [filestore :refer [new-fs-store]]]
@@ -30,6 +31,8 @@
         _ (def stage (<?? S (create-stage! user peer)))
         _ (<?? S (cs/create-cdvcs! stage :id cdvcs-id))
         c (chan)]
+    (when (= blob-backend :ipfs-block)
+      (ipfs/setup!))
     (def sync-in-loop (r/stream-into-identity! stage [user cdvcs-id]
                                                (eval-fs-fns blob-backend store)
                                                sync-path

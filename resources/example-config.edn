@@ -1,6 +1,8 @@
-{:store-path "/tmp/filesync-test"
- :sync-path "/var/tmp/input"
- :remotes ["ws://localhost:31744"]
- :user "mail:whilo@topiq.es"
- :cdvcs-id #uuid "34db8ec4-82bf-4c61-8e2a-a86294f0e6d4"
- :blob-backend :ipfs-block}
+{:store-path "/path/to/your/store"
+ :sync-path "/path/to/your/folder"
+ :remotes ["ws://replikativ.io:8888"] ;; this is the public !!! test-net
+ :user "mail:noname@topiq.es"
+ :cdvcs-id #uuid "34db8fc4-82bf-4c61-8e2a-a86294f0e6d4"
+ :blob-backend :inline #_:ipfs-block}
+
+

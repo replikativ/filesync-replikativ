@@ -2,13 +2,13 @@
   (:require [clojure.data :refer [diff]]
             [clojure.java.io :as io]
             [hasch.core :refer [uuid]]
-            [clj-ipfs-api.core :as ipfs]
             [replikativ.environ :refer [store-blob-trans-value]]
             [konserve.core :as k]
             [superv.async :refer [<?? S]])
   (:import [java.io ByteArrayOutputStream File FileInputStream FileOutputStream]
            [java.nio.file Files LinkOption]
            java.util.Date))
+
 
 (defn last-modified-time [f]
   (-> (io/file f)
@@ -46,8 +46,9 @@
        (if (= k 'add-file)
          (case blob-backend
            :ipfs-block
-           (let [ipfs-ref
-                 (ipfs/block-put
+           (let [_ (require '[clj-ipfs-api.core :as ipfs])
+                 ipfs-ref
+                 (@(resolve 'ipfs/block-put)
                   {:request {:multipart [{:name (pr-str (:path p))
                                           :content (FileInputStream. (io/file (:path p)))
                                           :content-type "application/octet-stream"}]}})]
@@ -85,6 +86,8 @@
 
 
 (defn eval-fs-fns [blob-backend store]
+  (when (= blob-backend :ipfs-block)
+    (require '[clj-ipfs-api.core :as ipfs]))
   {'add-dir (fn [base-path {p :path}]
               (.mkdirs (File. (str base-path p)))
               base-path)
@@ -99,7 +102,8 @@
                    (when (.exists (.getParentFile (io/file p)))
                      (case t
                        :ipfs-block
-                       (io/copy (ipfs/block-get (:Key ref) {:request {:as :stream}})
+                       (io/copy (@(resolve 'ipfs/block-get)
+                                 (:Key ref) {:request {:as :stream}})
                                 (io/file p))
 
                        :inline
